@@ -1,0 +1,13 @@
+# Nunca versionar datos de clientes ni secretos
+.env
+.env.local
+.env.production
+*.xlsx
+*.xls
+*.csv
+*.jpg
+*.jpeg
+*.png
+fixtures/
+datos/
+node_modules/
