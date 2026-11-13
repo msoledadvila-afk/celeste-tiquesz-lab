@@ -58,3 +58,15 @@ label { font-size: .9rem; color: var(--texto); } .check { display: flex; gap: 8p
 .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--azul); color: #fff; padding: 10px 16px; border-radius: var(--radio); max-width: 92vw; z-index: 30; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
 .toast.error { background: var(--error); } .toast.ok { background: var(--ok); }
 details > summary { cursor: pointer; font-weight: 600; color: var(--azul); min-height: 32px; }
+.tabla-scroll { overflow-x: auto; margin-top: 10px; -webkit-overflow-scrolling: touch; }
+.tabla { border-collapse: collapse; width: 100%; font-size: .9rem; min-width: 820px; }
+.tabla th { text-align: left; font-weight: 600; color: var(--suave); border-bottom: 2px solid var(--borde); padding: 6px; white-space: nowrap; position: sticky; top: 0; background: #fff; }
+.tabla td { border-bottom: 1px solid var(--borde); padding: 6px; vertical-align: middle; }
+.tabla td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tabla td.acc { white-space: nowrap; } .tabla td.acc .btn-link { margin-right: 8px; min-height: 32px; }
+.tabla input[type=checkbox] { width: 20px; height: 20px; min-height: 0; }
+.tabla tr.con-error td:first-child { box-shadow: inset 4px 0 var(--error); }
+.tabla tr.con-aviso td:first-child { box-shadow: inset 4px 0 var(--aviso); }
+.tabla tr.confirmada { color: var(--suave); }
+.tabla tr.detalle td { border-bottom: 1px solid var(--borde); padding-top: 0; }
+.tabla tr.detalle .alertas { margin: 0 0 4px; }

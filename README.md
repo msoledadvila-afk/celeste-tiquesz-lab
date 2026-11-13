@@ -56,7 +56,7 @@ El IVA que se informa es siempre el impreso en el Z. El exento va en el campo 12
 ## Pruebas
 
 ```bash
-node tests/test_reglas_y_seguridad.js          # datos inventados (46 casos)
+node tests/test_reglas_y_seguridad.js          # datos inventados (52 casos)
 OCT_FIXTURE=… OCT_REF=… node tests/test_octubre.js   # aceptación: octubre 2026 byte a byte (datos fuera del repo)
 node tests/e2e_server.js 8765 & python3 tests/e2e.py # punta a punta en Chrome, vista de celular
 ```

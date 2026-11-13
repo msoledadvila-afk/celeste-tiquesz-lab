@@ -139,7 +139,7 @@
     estado.vista = v;
     limpiar($app);
     const editable = v.estado === 'Borrador';
-    $app.append(
+    $app.append(...[
       el('button', { class: 'btn-link', onclick: pantallaBandeja, text: '← Bandeja' }),
       el('section', { class: 'cabecera' },
         el('div', {}, el('h1', { text: v.cliente.alias + ' · ' + v.periodo.slice(4) + '/' + v.periodo.slice(0, 4) }),
@@ -149,7 +149,7 @@
       bloqueControles(v),
       bloqueTabla(v, editable),
       bloqueTotales(v),
-      bloqueAcciones(v));
+      bloqueAcciones(v)].filter(Boolean));
   }
 
   function pasos(actual) {
@@ -221,27 +221,74 @@
     ['gravado', 'Gravado', 'imp'], ['iva21', 'IVA 21 %', 'imp'], ['iva105', 'IVA 10,5 %', 'imp'], ['exento', 'Exento', 'imp'], ['no_gravado', 'No gravado', 'imp'], ['total', 'Total', 'imp']
   ];
 
+  // Alertas que no impiden confirmar en bloque: el redondeo de ±$0,01 del controlador es esperable.
+  function alertasRelevantes(f) { return f.alertas.filter(a => a !== 'Sin confirmar.' && !/^IVA 21 % calculado vs impreso: -?0\.0[1-9]/.test(a)); }
+
   function bloqueTabla(v, editable) {
     const caja = el('section', { class: 'tarjeta' }, el('h2', { text: '3 · Tabla de control por Z (' + v.filas.length + ')' }));
-    if (editable) caja.append(el('button', { class: 'btn-sec', onclick: () => editarFila(null), text: '+ Cargar un Z a mano' }));
-    const tabla = el('div', { class: 'tabla-z' });
+    const pendientes = v.filas.filter(f => f.confirmado !== 'SI');
+    const marcados = new Set();
+    const btnConfirmar = el('button', { class: 'btn', disabled: true, text: 'Confirmar seleccionados' });
+    const actualizar = () => {
+      btnConfirmar.disabled = marcados.size === 0;
+      btnConfirmar.textContent = '✔ Confirmar seleccionados (' + marcados.size + ')';
+      checks.forEach((c, id) => { c.checked = marcados.has(id); });
+      todos.checked = pendientes.length > 0 && marcados.size === pendientes.length;
+    };
+    const checks = new Map();
+    const todos = el('input', { type: 'checkbox', 'aria-label': 'Seleccionar todos los pendientes', disabled: !editable || !pendientes.length });
+    todos.addEventListener('change', () => { marcados.clear(); if (todos.checked) pendientes.forEach(f => marcados.add(f.id)); actualizar(); });
+
+    if (editable) {
+      caja.append(el('div', { class: 'acciones-fila' },
+        el('button', { class: 'btn-sec', text: 'Seleccionar los que no tienen alertas', disabled: !pendientes.length, onclick: () => {
+          marcados.clear(); pendientes.filter(f => !alertasRelevantes(f).length).forEach(f => marcados.add(f.id)); actualizar();
+        } }),
+        el('button', { class: 'btn-link', text: 'Quitar selección', onclick: () => { marcados.clear(); actualizar(); } }),
+        btnConfirmar,
+        el('button', { class: 'btn-link', onclick: () => editarFila(null), text: '+ Cargar un Z a mano' })));
+      caja.append(el('p', { class: 'nota', text: pendientes.length
+        ? pendientes.length + ' Z sin confirmar. Las filas con alertas conviene abrirlas y mirar la foto antes de tildarlas.'
+        : 'Todos los Z están confirmados.' }));
+      btnConfirmar.addEventListener('click', () => conEspera(btnConfirmar, async () => {
+        const r = await api('confirmarVarios', { cliente: estado.cliente, periodo: estado.periodo, ids: Array.from(marcados) });
+        toast(r.confirmados + ' Z confirmados' + (r.omitidos.length ? ' · sin datos completos: ' + r.omitidos.join(', ') : '') + '.', r.omitidos.length ? 'error' : 'ok');
+        pantallaCliente();
+      }));
+    }
+
+    const cab = ['Z', 'Fecha', 'Tiques', 'Total', 'Neto 21 %', 'IVA 21 %', 'Neto 10,5 %', 'IVA 10,5 %', 'Exento / no grav.', 'Estado', ''];
+    const tbody = el('tbody');
     v.filas.forEach(f => {
-      const tieneError = f.alertas.some(a => !esAviso(a));
-      tabla.append(el('article', { class: 'z ' + (f.confirmado !== 'SI' ? 'pendiente ' : '') + (tieneError ? 'con-error' : f.alertas.length ? 'con-aviso' : 'ok') },
-        el('div', { class: 'fila-sep' },
-          el('strong', { text: 'Z ' + (f.z || '—') + ' · ' + (fechaCorta(f.fecha) || 'sin fecha') }),
-          el('span', { class: 'meta', text: f.confirmado === 'SI' ? '✔ confirmado' : (f.origen.startsWith('ia') ? 'leído por IA · sin confirmar' : 'sin confirmar') })),
-        el('div', { class: 'meta', text: 'Tiques ' + (f.desde || '?') + '–' + (f.hasta || '?') + ' (' + (f.cant || '?') + ')' }),
-        el('dl', { class: 'importes' },
-          dt('Total', pesos(f.total)), f.neto21 && Number(f.neto21) ? dt('Neto 21 %', pesos(f.neto21)) : null, f.iva21 ? dt('IVA 21 %', pesos(f.iva21)) : null,
-          f.neto105 && Number(f.neto105) ? dt('Neto 10,5 %', pesos(f.neto105)) : null, f.iva105 ? dt('IVA 10,5 %', pesos(f.iva105)) : null,
-          Number(f.exento) ? dt('Exento', pesos(f.exento)) : null, Number(f.no_gravado) ? dt('No gravado', pesos(f.no_gravado)) : null),
-        f.alertas.length ? el('ul', { class: 'alertas' }, f.alertas.map(a => el('li', { class: esAviso(a) ? 'aviso' : 'error', text: a }))) : null,
-        el('div', { class: 'acciones-fila' },
-          f.foto_id ? el('button', { class: 'btn-link', onclick: () => verFoto(f), text: 'Ver foto' }) : null,
-          editable ? el('button', { class: 'btn-sec', onclick: () => editarFila(f), text: f.confirmado === 'SI' ? 'Editar' : 'Revisar y confirmar' }) : null)));
+      const rel = alertasRelevantes(f);
+      const err = f.alertas.some(a => !esAviso(a) && a !== 'Sin confirmar.');
+      const conf = f.confirmado === 'SI';
+      const chk = el('input', { type: 'checkbox', 'aria-label': 'Seleccionar Z ' + (f.z || ''), disabled: !editable || conf });
+      if (!conf) { checks.set(f.id, chk); chk.addEventListener('change', () => { chk.checked ? marcados.add(f.id) : marcados.delete(f.id); actualizar(); }); }
+      const exNg = Number(f.exento || 0) + Number(f.no_gravado || 0);
+      tbody.append(el('tr', { class: (err ? 'con-error' : rel.length ? 'con-aviso' : '') + (conf ? ' confirmada' : '') },
+        el('td', {}, chk),
+        el('td', { class: 'num', text: f.z || '—' }),
+        el('td', { text: fechaCorta(f.fecha) || '—' }),
+        el('td', { class: 'num', text: (f.desde || '?') + '–' + (f.hasta || '?') }),
+        el('td', { class: 'num', text: pesos(f.total) }),
+        el('td', { class: 'num', text: Number(f.neto21) ? pesos(f.neto21) : '' }),
+        el('td', { class: 'num', text: f.iva21 ? pesos(f.iva21) : '' }),
+        el('td', { class: 'num', text: Number(f.neto105) ? pesos(f.neto105) : '' }),
+        el('td', { class: 'num', text: f.iva105 ? pesos(f.iva105) : '' }),
+        el('td', { class: 'num', text: exNg ? pesos(exNg.toFixed(2)) : '' }),
+        el('td', { text: conf ? '✔' : (f.origen.startsWith('ia') ? 'IA · revisar' : 'revisar') }),
+        el('td', { class: 'acc' },
+          f.foto_id ? el('button', { class: 'btn-link', onclick: () => verFoto(f), text: 'Foto' }) : null,
+          editable ? el('button', { class: 'btn-link', onclick: () => editarFila(f), text: 'Editar' }) : null)));
+      if (rel.length || (f.alertas.length && !conf && f.alertas.some(a => /^IVA 21 % calculado/.test(a)))) {
+        tbody.append(el('tr', { class: 'detalle' }, el('td', {}), el('td', { colspan: 11 },
+          el('ul', { class: 'alertas' }, f.alertas.filter(a => a !== 'Sin confirmar.').map(a => el('li', { class: esAviso(a) ? 'aviso' : 'error', text: a }))))));
+      }
     });
-    caja.append(tabla);
+    caja.append(el('div', { class: 'tabla-scroll' }, el('table', { class: 'tabla' },
+      el('thead', {}, el('tr', {}, el('th', {}, todos), cab.map(c => el('th', { text: c })))), tbody)));
+    actualizar();
     return caja;
   }
   function esAviso(a) { return /^(IVA 21 % calculado|Neto e IVA calculados|Lectura dudosa|Observación|Salto de|La cantidad)/.test(a); }

@@ -15,7 +15,7 @@
 // La planilla de datos es la que contiene este script (script vinculado).
 // =====================================================================
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 const ERROR_GENERICO = 'Ocurrió un error inesperado.';
 const NO_AUTORIZADO = 'No autorizado';
 const SESION_SEG = 8 * 60 * 60;
@@ -122,7 +122,7 @@ function doPost(e) {
   }
 }
 
-const ESCRITURAS = ['subirFoto', 'guardarZ', 'borrarZ', 'aprobar', 'marcarImportado', 'registrarVistaPrevia', 'reabrir', 'guardarCliente'];
+const ESCRITURAS = ['subirFoto', 'guardarZ', 'confirmarVarios', 'borrarZ', 'aprobar', 'marcarImportado', 'registrarVistaPrevia', 'reabrir', 'guardarCliente'];
 
 const ACCIONES = {
   bandeja: d => bandeja_(periodo_(d.periodo)),
@@ -136,7 +136,8 @@ const ACCIONES = {
   registrarVistaPrevia: d => registrarVistaPrevia_(cliente_(d.cliente), periodo_(d.periodo), d.total),
   reabrir: d => reabrir_(cliente_(d.cliente), periodo_(d.periodo), d.motivo),
   descargar: d => descargar_(cliente_(d.cliente), periodo_(d.periodo), d.tipo),
-  guardarCliente: d => guardarCliente_(d)
+  guardarCliente: d => guardarCliente_(d),
+  confirmarVarios: d => confirmarVarios_(cliente_(d.cliente), periodo_(d.periodo), d.ids)
 };
 
 // =====================================================================
@@ -584,6 +585,34 @@ function guardarZ_(d) {
   escribirFila_('Z', nueva, reg ? reg._fila : null);
   auditar_(reg ? 'editarZ' : 'altaZ', cliente, periodo, 'Z ' + nueva.z + (nueva.confirmado === 'SI' ? ' confirmado' : ''));
   return { ok: true, id: nueva.id };
+}
+
+// Confirma varios Z de una vez (revisión en bloque desde la lista).
+// Solo filas del cliente y período indicados, con los datos mínimos completos.
+// Se escribe en una sola operación sobre la hoja.
+function confirmarVarios_(cliente, periodo, ids) {
+  editable_(cliente, periodo);
+  if (!Array.isArray(ids) || !ids.length || ids.length > 500) throw err_('Seleccioná al menos un Z.');
+  const pedidos = new Set(ids.map(id_));
+  const sh = hoja_('Z');
+  const v = sh.getDataRange().getValues();
+  const h = v[0], col = k => h.indexOf(k);
+  const cC = col('cliente'), cP = col('periodo'), cId = col('id'), cConf = col('confirmado'), cDud = col('dudosos'), cAct = col('actualizado_en');
+  const ahora = new Date().toISOString();
+  let primera = 0, ultima = 0, ok = 0;
+  const omitidos = [];
+  for (let i = 1; i < v.length; i++) {
+    const r = v[i];
+    if (String(r[cC]) !== cliente || String(r[cP]) !== periodo || !pedidos.has(String(r[cId]))) continue;
+    const z = String(r[col('z')]), fecha = String(r[col('fecha')]), total = String(r[col('total')]);
+    if (!z || !fecha || total === '') { omitidos.push(z || '(sin Nº)'); continue; }
+    if (String(r[cConf]) === 'SI') continue;
+    r[cConf] = 'SI'; r[cDud] = ''; r[cAct] = ahora; ok++;
+    if (!primera) primera = i; ultima = i;
+  }
+  if (ok) sh.getRange(primera + 1, 1, ultima - primera + 1, h.length).setValues(v.slice(primera, ultima + 1));
+  auditar_('confirmarVarios', cliente, periodo, ok + ' Z confirmados' + (omitidos.length ? ' · omitidos: ' + omitidos.join(', ') : ''));
+  return { ok: true, confirmados: ok, omitidos: omitidos };
 }
 
 function borrarZ_(d) {

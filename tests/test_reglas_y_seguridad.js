@@ -59,6 +59,20 @@ const sinConf = P('guardarZ', { cliente: 'PRUEBA', periodo: '202611', fila: { z:
 v = P('periodo', { cliente: 'PRUEBA', periodo: '202611' });
 ok(v.filas.find(f => f.id === sinConf.id).alertas.includes('Sin confirmar.'), 'Fila sin confirmar bloquea');
 
+// --- Confirmación en bloque ---
+const vb = P('periodo', { cliente: 'PRUEBA', periodo: '202611' });
+const ids = vb.filas.map(f => f.id);
+const sinConfAntes = vb.filas.filter(f => f.confirmado !== 'SI').length;
+ok(sinConfAntes === 1, 'Antes del bloque: 1 sin confirmar');
+let cb = P('confirmarVarios', { cliente: 'PRUEBA', periodo: '202611', ids: ids });
+ok(cb.ok && cb.confirmados === 1, 'Confirmar en bloque: solo cuenta los pendientes');
+ok(P('periodo', { cliente: 'PRUEBA', periodo: '202611' }).filas.every(f => f.confirmado === 'SI'), 'Después del bloque: todos confirmados');
+ok(!!P('confirmarVarios', { cliente: 'PRUEBA', periodo: '202611', ids: [] }).error, 'Bloque vacío rechazado');
+ok(!!P('confirmarVarios', { cliente: 'PRUEBA', periodo: '202611', ids: ['../x'] }).error, 'ID inválido en bloque rechazado');
+const filasAntes = JSON.stringify(env.hojas.Z.filas.length);
+cb = P('confirmarVarios', { cliente: 'PRUEBA', periodo: '202612', ids: ids });
+ok(cb.confirmados === 0 && JSON.stringify(env.hojas.Z.filas.length) === filasAntes, 'Bloque con otro período no toca filas ajenas');
+
 // --- Subida de fotos ---
 const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(100)]).toString('base64');
 ok(!!P('subirFoto', { cliente: 'PRUEBA', periodo: '202611', base64: Buffer.from('<html>').toString('base64') }).error, 'Archivo que no es imagen rechazado');
